@@ -8,6 +8,7 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <Description>ControlzEx is a library with some shared Controls for WPF.</Description>
         <Nullable>enable</Nullable>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     </PropertyGroup>
 
     <!-- NuGet -->
@@ -17,7 +18,7 @@
         <PackageProjectUrl>https://github.com/ControlzEx/ControlzEx</PackageProjectUrl>
         <PackageIcon>logo-mini.png</PackageIcon>
         <PackageTags>WPF;UI;Metro;Modern;Material;XAML;Toolkit;Library;.NET;OSS;OpenSource;WindowChrome</PackageTags>
-        <PackageReleaseNotes>https://github.com/ControlzEx/ControlzEx/releases</PackageReleaseNotes>
+        <PackageReleaseNotes>https://github.com/ControlzEx/ControlzEx/blob/develop/Changelog.md</PackageReleaseNotes>
         <RepositoryUrl>https://github.com/ControlzEx/ControlzEx.git</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <GenerateLibraryLayout>true</GenerateLibraryLayout>
@@ -39,14 +40,11 @@
         <Compile DependentUpon="%(Filename)" SubType="Designer" Update="**\*.xaml$(DefaultLanguageSourceExtension)" />
     </ItemGroup>
 
-    <PropertyGroup>
-        <IsBuildingForLegacyFramework>false</IsBuildingForLegacyFramework>
-        <IsBuildingForLegacyFramework Condition="'$(TargetFramework)' == 'net452' or '$(TargetFramework)' == 'net462'">true</IsBuildingForLegacyFramework>
-    </PropertyGroup>
-
     <ItemGroup>
         <Reference Include="System.Web" Condition="'$(IsBuildingForLegacyFramework)' == 'true'" />
         <Reference Include="System.Web.Extensions" Condition="'$(IsBuildingForLegacyFramework)' == 'true'" />
+        <PackageReference Include="System.Memory" Condition="'$(IsBuildingForLegacyFramework)' == 'true'" />
+
         <PackageReference Include="System.Text.Json" Condition="'$(IsBuildingForLegacyFramework)' == 'false'" />
     </ItemGroup>
 

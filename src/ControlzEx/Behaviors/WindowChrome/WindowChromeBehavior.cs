@@ -5,6 +5,7 @@ namespace ControlzEx.Behaviors
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics.CodeAnalysis;
     using System.Runtime.InteropServices;
     using System.Security;
     using System.Windows;
@@ -125,7 +126,7 @@ namespace ControlzEx.Behaviors
         /// <summary>
         /// <see cref="DependencyProperty"/> for <see cref="KeepBorderOnMaximize"/>.
         /// </summary>
-        public static readonly DependencyProperty KeepBorderOnMaximizeProperty = DependencyProperty.Register(nameof(KeepBorderOnMaximize), typeof(bool), typeof(WindowChromeBehavior), new PropertyMetadata(BooleanBoxes.TrueBox, OnKeepBorderOnMaximizeChanged));
+        public static readonly DependencyProperty KeepBorderOnMaximizeProperty = DependencyProperty.Register(nameof(KeepBorderOnMaximize), typeof(bool), typeof(WindowChromeBehavior), new PropertyMetadata(BooleanBoxes.FalseBox, OnKeepBorderOnMaximizeChanged));
 
         // ReSharper disable once InconsistentNaming
         private static readonly DependencyPropertyKey IsNCActivePropertyKey = DependencyProperty.RegisterReadOnly(nameof(IsNCActive), typeof(bool), typeof(WindowChromeBehavior), new PropertyMetadata(BooleanBoxes.FalseBox));
@@ -156,14 +157,9 @@ namespace ControlzEx.Behaviors
             }
         }
 
-        private void UpdateMinimizeSystemMenu(bool isVisible)
+        private void UpdateMinimizeSystemMenu(bool isVisible, bool updateSystemMenu = true)
         {
-            if (this.windowHandle == IntPtr.Zero)
-            {
-                return;
-            }
-
-            if (this.hwndSource?.IsDisposed == true)
+            if (this.IsWindowUsable() is false)
             {
                 return;
             }
@@ -177,7 +173,10 @@ namespace ControlzEx.Behaviors
                 this._ModifyStyle(WINDOW_STYLE.WS_MINIMIZEBOX, 0);
             }
 
-            this._UpdateSystemMenu(this.AssociatedObject?.WindowState);
+            if (updateSystemMenu)
+            {
+                this._UpdateSystemMenu(this.AssociatedObject?.WindowState);
+            }
         }
 
         /// <summary>
@@ -201,14 +200,9 @@ namespace ControlzEx.Behaviors
             }
         }
 
-        private void UpdateMaxRestoreSystemMenu(bool isVisible)
+        private void UpdateMaxRestoreSystemMenu(bool isVisible, bool updateSystemMenu = true)
         {
-            if (this.windowHandle == IntPtr.Zero)
-            {
-                return;
-            }
-
-            if (this.hwndSource?.IsDisposed == true)
+            if (this.IsWindowUsable() is false)
             {
                 return;
             }
@@ -222,7 +216,25 @@ namespace ControlzEx.Behaviors
                 this._ModifyStyle(WINDOW_STYLE.WS_MAXIMIZEBOX, 0);
             }
 
-            this._UpdateSystemMenu(this.AssociatedObject?.WindowState);
+            if (updateSystemMenu)
+            {
+                this._UpdateSystemMenu(this.AssociatedObject?.WindowState);
+            }
+        }
+
+        [MemberNotNullWhen(true, nameof(hwndSource))]
+        private bool IsWindowUsable()
+        {
+            if (this.windowHandle == HWND.Null
+                || this.hwndSource is null
+                || this.hwndSource.IsDisposed
+                || this.hwndSource.CompositionTarget is null
+                || this.isCleanedUp)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -260,17 +272,32 @@ namespace ControlzEx.Behaviors
         private static void OnUseNativeCaptionButtonsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var behavior = (WindowChromeBehavior)d;
-            if ((bool)e.NewValue)
+
+            if (behavior.IsWindowUsable() is false)
             {
-                behavior._ModifyStyle(0, WINDOW_STYLE.WS_SYSMENU);
+                return;
+            }
+
+            behavior.UpdateNativeCaptionButtons();
+        }
+
+        private void UpdateNativeCaptionButtons(bool forceRedraw = true)
+        {
+            if (this.UseNativeCaptionButtons)
+            {
+                this._ModifyStyle(0, WINDOW_STYLE.WS_SYSMENU);
             }
             else
             {
-                behavior._ModifyStyle(WINDOW_STYLE.WS_SYSMENU, 0);
+                this._ModifyStyle(WINDOW_STYLE.WS_SYSMENU, 0);
             }
 
-            behavior.UpdateCaptionButtonsSize();
-            behavior.ForceNativeWindowRedraw();
+            this.UpdateCaptionButtonsSize();
+
+            if (forceRedraw)
+            {
+                this.ForceNativeWindowRedraw();
+            }
         }
 
         public static readonly DependencyProperty CaptionButtonsSizeProperty = DependencyProperty.Register(nameof(CaptionButtonsSize), typeof(Size), typeof(WindowChromeBehavior), new PropertyMetadata(default(Size)));
@@ -297,7 +324,7 @@ namespace ControlzEx.Behaviors
 
         private void UpdateGlassFrameThickness()
         {
-            if (this.windowHandle == IntPtr.Zero)
+            if (this.IsWindowUsable() is false)
             {
                 return;
             }
@@ -475,7 +502,7 @@ namespace ControlzEx.Behaviors
 
         private unsafe void UpdateCaptionButtonsSize()
         {
-            if (this.windowHandle == IntPtr.Zero)
+            if (this.IsWindowUsable() is false)
             {
                 return;
             }
@@ -529,9 +556,7 @@ namespace ControlzEx.Behaviors
 
         private void ForceNativeWindowRedraw()
         {
-            if (this.windowHandle == IntPtr.Zero
-                || this.hwndSource is null
-                || this.hwndSource.IsDisposed)
+            if (this.IsWindowUsable() is false)
             {
                 return;
             }
@@ -607,7 +632,7 @@ namespace ControlzEx.Behaviors
 
         private bool UpdateDWMCornerPreference(DWM_WINDOW_CORNER_PREFERENCE cornerPreference)
         {
-            if (this.windowHandle == IntPtr.Zero)
+            if (this.IsWindowUsable() is false)
             {
                 return false;
             }

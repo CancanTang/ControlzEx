@@ -7,6 +7,7 @@ namespace ControlzEx
     using System.Windows.Interop;
     using System.Windows.Media;
     using ControlzEx.Behaviors;
+    using ControlzEx.Helpers;
     using ControlzEx.Internal;
     using ControlzEx.Internal.KnownBoxes;
     using ControlzEx.Native;
@@ -16,7 +17,6 @@ namespace ControlzEx
     using Windows.Win32;
     using Windows.Win32.Foundation;
     using Windows.Win32.Graphics.Dwm;
-    using Windows.Win32.UI.WindowsAndMessaging;
     using COLORREF = Windows.Win32.COLORREF;
 
     [PublicAPI]
@@ -42,11 +42,6 @@ namespace ControlzEx
 
             this.windowHandle = new HWND(new WindowInteropHelper(this).Handle);
             this.hwndSource = HwndSource.FromHwnd(this.windowHandle);
-
-            if (this.hwndSource?.CompositionTarget is { } compositionTarget)
-            {
-                compositionTarget.BackgroundColor = Colors.Transparent;
-            }
 
             this.UpdateCaptionColor();
 
@@ -189,7 +184,7 @@ namespace ControlzEx
         }
 
         /// <summary>Identifies the <see cref="KeepBorderOnMaximize"/> dependency property.</summary>
-        public static readonly DependencyProperty KeepBorderOnMaximizeProperty = DependencyProperty.Register(nameof(KeepBorderOnMaximize), typeof(bool), typeof(WindowChromeWindow), new PropertyMetadata(BooleanBoxes.TrueBox));
+        public static readonly DependencyProperty KeepBorderOnMaximizeProperty = DependencyProperty.Register(nameof(KeepBorderOnMaximize), typeof(bool), typeof(WindowChromeWindow), new PropertyMetadata(BooleanBoxes.FalseBox));
 
         /// <summary>Identifies the <see cref="ShowMinButton"/> dependency property.</summary>
         public static readonly DependencyProperty ShowMinButtonProperty = DependencyProperty.Register(nameof(ShowMinButton), typeof(bool), typeof(WindowChromeWindow), new PropertyMetadata(BooleanBoxes.TrueBox));
@@ -415,37 +410,28 @@ namespace ControlzEx
         /// <summary>
         /// Updates the padding used for the window content.
         /// </summary>
-        protected virtual unsafe void UpdatePadding()
+        protected virtual void UpdatePadding()
         {
-            if (this.WindowState is WindowState.Maximized
-                && this.UseNativeCaptionButtons
-                && this.IgnoreTaskbarOnMaximize is false)
+            if (this.WindowState is WindowState.Normal)
             {
-                var hWnd = (HWND)new WindowInteropHelper(this).Handle;
-                RECT rc = default;
-                PInvoke.AdjustWindowRect(&rc, PInvoke.GetWindowStyle(hWnd), false);
-                var borderThickness = Math.Abs(rc.X);
-                this.SetCurrentValue(PaddingProperty, new Thickness(borderThickness));
+                if ((this.IsActive
+                    && this.GlowColor is not null)
+                    ||
+                    (this.IsActive is false
+                    && this.NonActiveGlowColor is not null))
+                {
+                    this.SetCurrentValue(PaddingProperty, defaultContentPadding);
+                    return;
+                }
+
                 return;
             }
 
-            if (this.WindowState is WindowState.Maximized)
+            if (this.UseNativeCaptionButtons
+                && this.IgnoreTaskbarOnMaximize is false
+                && this.WindowState is WindowState.Maximized)
             {
-                this.SetCurrentValue(PaddingProperty, emptyContentPadding);
-                return;
-            }
-
-            if (this.IsActive
-                && this.GlowColor is not null)
-            {
-                this.SetCurrentValue(PaddingProperty, defaultContentPadding);
-                return;
-            }
-
-            if (this.IsActive == false
-                && this.NonActiveGlowColor is not null)
-            {
-                this.SetCurrentValue(PaddingProperty, defaultContentPadding);
+                this.SetCurrentValue(PaddingProperty, new Thickness(0, WindowChromeBehavior.GetDefaultResizeBorderThickness().Top, 0, 0));
                 return;
             }
 

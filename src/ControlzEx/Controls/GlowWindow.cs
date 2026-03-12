@@ -1,6 +1,4 @@
 // ReSharper disable IdentifierTypo
-#nullable enable
-
 // ReSharper disable once CheckNamespace
 namespace ControlzEx.Controls.Internal
 {
@@ -284,7 +282,7 @@ namespace ControlzEx.Controls.Internal
 
             fixed (BITMAPINFO* pbitmapinfo = &this.bitmapInfo)
             {
-                this.Handle = new DeleteObjectSafeHandle(PInvoke.CreateDIBSection(new HDC(hdcScreen.DangerousGetHandle()), pbitmapinfo, DIB_USAGE.DIB_RGB_COLORS, out var bits, default, 0));
+                this.Handle = new DeleteObjectSafeHandle(PInvoke.CreateDIBSection(new HDC(hdcScreen.DangerousGetHandle()), pbitmapinfo, DIB_USAGE.DIB_RGB_COLORS, out IntPtr bits, default, 0));
                 this.pbits = bits;
             }
         }
@@ -961,7 +959,7 @@ namespace ControlzEx.Controls.Internal
                 }
                 else
                 {
-                    PInvoke.DeferWindowPos(windowPosInfo, this.Hwnd, default, this.Left, this.Top, this.Width, this.Height, flags);
+                    PInvoke.DeferWindowPos((HDWP)windowPosInfo, this.Hwnd, default, this.Left, this.Top, this.Width, this.Height, flags);
                 }
             }
         }
