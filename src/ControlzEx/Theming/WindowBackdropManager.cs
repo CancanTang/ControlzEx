@@ -3,7 +3,6 @@ namespace ControlzEx.Theming
     using System;
     using System.Windows;
     using System.Windows.Interop;
-    using System.Windows.Media;
     using ControlzEx.Helpers;
     using ControlzEx.Internal;
 
@@ -59,14 +58,6 @@ namespace ControlzEx.Theming
                 return true;
             }
 
-            var hwndSource = PresentationSource.FromVisual(target) as HwndSource;
-            if (hwndSource?.CompositionTarget is { } compositionTarget)
-            {
-                compositionTarget.BackgroundColor = windowBackdropType is not WindowBackdropType.None
-                    ? Colors.Transparent
-                    : Color.FromRgb(0, 0, 0); // same value as in HwndTarget
-            }
-
             if (target is { AllowsTransparency: true })
             {
                 SetCurrentBackdropType(target, WindowBackdropType.None);
@@ -79,15 +70,13 @@ namespace ControlzEx.Theming
                 return false;
             }
 
-            if (hwndSource is not null)
+            if (PresentationSource.FromVisual(target) is HwndSource hwndSource)
             {
                 var handle = hwndSource.Handle;
 
                 var result = UpdateBackdrop(handle, windowBackdropType);
 
-                SetCurrentBackdropType(target, result
-                                           ? windowBackdropType
-                                           : WindowBackdropType.None);
+                SetCurrentBackdropType(target, result ? windowBackdropType : WindowBackdropType.None);
 
                 return result;
             }

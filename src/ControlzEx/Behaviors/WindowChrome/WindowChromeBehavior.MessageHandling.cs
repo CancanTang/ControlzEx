@@ -13,7 +13,9 @@ namespace ControlzEx.Behaviors
     using ControlzEx.Native;
     using global::Windows.Win32;
     using global::Windows.Win32.Foundation;
+    using global::Windows.Win32.Graphics.Dwm;
     using global::Windows.Win32.Graphics.Gdi;
+    using global::Windows.Win32.UI.Controls;
     using global::Windows.Win32.UI.Input.KeyboardAndMouse;
     using global::Windows.Win32.UI.WindowsAndMessaging;
     using Point = System.Windows.Point;
@@ -24,11 +26,12 @@ namespace ControlzEx.Behaviors
 
         private const SET_WINDOW_POS_FLAGS SwpFlags = SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE;
 
-        private WindowState lastWindowStateForSystemMenu;
-        private ResizeMode lastResizeModeForSystemMenu;
+        private WindowState lastMenuState;
         private WINDOWPOS lastWindowpos;
 
+#pragma warning disable 414
         private bool isDragging;
+#pragma warning restore 414
 
         private NonClientControlManager? nonClientControlManager;
 
@@ -78,16 +81,19 @@ namespace ControlzEx.Behaviors
         [SecurityCritical]
         private void _ApplyNewCustomChrome()
         {
-            if (this.IsWindowUsable() is false)
+            if (this.windowHandle == HWND.Null
+                || this.hwndSource is null
+                || this.hwndSource.IsDisposed
+                || this.hwndSource.CompositionTarget is null)
             {
+                // Not yet hooked.
                 return;
             }
 
             // Force this the first time.
-            this.UpdateNativeCaptionButtons(forceRedraw: false);
-            this.UpdateMinimizeSystemMenu(this.EnableMinimize, updateSystemMenu: false);
-            this.UpdateMaxRestoreSystemMenu(this.EnableMaxRestore, updateSystemMenu: false);
             this._UpdateSystemMenu(this.AssociatedObject.WindowState);
+            this.UpdateMinimizeSystemMenu(this.EnableMinimize);
+            this.UpdateMaxRestoreSystemMenu(this.EnableMaxRestore);
             this.UpdateWindowStyle();
             this.UpdateGlassFrameThickness();
 
@@ -115,7 +121,9 @@ namespace ControlzEx.Behaviors
         [SecurityCritical]
         private IntPtr WindowProc(IntPtr hwnd, int msg, nuint wParam, nint lParam, ref bool handled)
         {
-            if (this.IsWindowUsable() is false)
+            if (this.hwndSource is null
+                || this.hwndSource.IsDisposed
+                || this.isCleanedUp)
             {
                 return IntPtr.Zero;
             }
@@ -179,9 +187,6 @@ namespace ControlzEx.Behaviors
                     return this._HandleNCMOUSELEAVE(message, wParam, lParam, out handled);
                 case WM.MOUSELEAVE:
                     return this._HandleMOUSELEAVE(message, wParam, lParam, out handled);
-                case WM.ENTERMENULOOP:
-                    this._UpdateSystemMenu(this.AssociatedObject.WindowState);
-                    return IntPtr.Zero;
             }
 
             return IntPtr.Zero;
@@ -314,90 +319,74 @@ namespace ControlzEx.Behaviors
         [SecurityCritical]
         private IntPtr _HandleNCCALCSIZE(WM uMsg, nuint wParam, nint lParam, out bool handled)
         {
-            handled = true;
-
-            if (wParam is 0)
-            {
-                return IntPtr.Zero;
-            }
-
             // lParam is an [in, out] that can be either a RECT* (wParam == FALSE) or an NCCALCSIZE_PARAMS*.
             // Since the first field of NCCALCSIZE_PARAMS is a RECT and is the only field we care about
             // we can unconditionally treat it as a RECT.
-            var originalSize = Marshal.PtrToStructure<RECT>(lParam);
 
-            var defResult = PInvoke.DefWindowProc(this.windowHandle, (uint)uMsg, wParam, lParam);
-            if (defResult.Value is not 0)
-            {
-                return defResult.Value;
-            }
+            handled = true;
 
-            var newSize = Marshal.PtrToStructure<RECT>(lParam);
-
-            var windowStyle = this.AssociatedObject.WindowStyle;
-            if (windowStyle is not WindowStyle.None)
-            {
-                // Re-apply the original top from before the size of the default frame was applied.
-                // This removes the titlebar.
-                newSize.top = originalSize.top;
-            }
-            else
-            {
-                newSize = originalSize;
-            }
+            var wParamIsTrue = wParam != 0;
 
             var hwndState = this._GetHwndState();
 
-            if (hwndState is WindowState.Maximized)
+            if (hwndState is WindowState.Maximized
+                && this.UseNativeCaptionButtons)
             {
-                // Increasing top with native caption buttons does not work as that causes the buttons to be unresponsive
+                // todo: window content shifts up by the resize border thickness... if we change the nc-area the caption buttons stop responding...
+            }
+            else if (hwndState is WindowState.Maximized)
+            {
+                // We have to get the monitor preferably from the window position as the info for the window handle might not yet be updated.
+                // As we update lastWindowpos in WINDOWPOSCHANGING we have the right "future" position and thus can get the correct monitor from that.
+                var monitor = MonitorHelper.MonitorFromWindowPosOrWindow(this.lastWindowpos, this.windowHandle);
+                var monitorInfo = PInvoke.GetMonitorInfo(monitor);
+                //System.Diagnostics.Trace.WriteLine(monitorInfo.rcWork);
+
+                var monitorRect = this.IgnoreTaskbarOnMaximize
+                    ? monitorInfo.rcMonitor
+                    : monitorInfo.rcWork;
+
+                var rc = Marshal.PtrToStructure<RECT>(lParam);
+                rc.left = monitorRect.left;
+                rc.top = monitorRect.top;
+                rc.right = monitorRect.right;
+                rc.bottom = monitorRect.bottom;
+
+                // monitor and work area will be equal if taskbar is hidden
                 if (this.IgnoreTaskbarOnMaximize is false
-                    && this.UseNativeCaptionButtons is false
-                    && windowStyle is not WindowStyle.None)
+                    && monitorInfo.rcMonitor.GetHeight() == monitorInfo.rcWork.GetHeight()
+                    && monitorInfo.rcMonitor.GetWidth() == monitorInfo.rcWork.GetWidth())
                 {
-                    newSize.top += (int)GetDefaultResizeBorderThickness().Top;
+                    rc = AdjustWorkingAreaForAutoHide(monitor, rc);
                 }
 
-                // Handle FullScreen and autohide
-                {
-                    // We have to get the monitor preferably from the window position as the info for the window handle might not yet be updated.
-                    // As we update lastWindowpos in WINDOWPOSCHANGING we have the right "future" position and thus can get the correct monitor from that.
-                    var monitor = MonitorHelper.MonitorFromWindowPosOrWindow(this.lastWindowpos, this.windowHandle);
-                    var monitorInfo = PInvoke.GetMonitorInfo(monitor);
-                    //System.Diagnostics.Trace.WriteLine(monitorInfo.rcWork);
-
-                    if (this.IgnoreTaskbarOnMaximize)
-                    {
-                        var monitorRect = monitorInfo.rcMonitor;
-
-                        newSize.left = monitorRect.left;
-                        newSize.top = monitorRect.top;
-                        newSize.right = monitorRect.right;
-                        newSize.bottom = monitorRect.bottom;
-                    } // monitor and work area will be equal if taskbar is hidden
-                    else if (monitorInfo.rcMonitor.GetHeight() == monitorInfo.rcWork.GetHeight()
-                        && monitorInfo.rcMonitor.GetWidth() == monitorInfo.rcWork.GetWidth())
-                    {
-                        newSize = AdjustWorkingAreaForAutoHide(monitor, newSize);
-                    }
-                }
-            }
-            else if (PInvoke.GetWindowStyle(this.windowHandle).HasFlag(WINDOW_STYLE.WS_CAPTION))
+                Marshal.StructureToPtr(rc, lParam, true);
+            } // Only do this for Win 11 or greater, or when the native caption buttons should be used, where we might want to keep the native window border
+            else if ((OSVersionHelper.IsWindows11_OrGreater || this.UseNativeCaptionButtons)
+                     && PInvoke.GetWindowStyle(this.windowHandle).HasFlag(WINDOW_STYLE.WS_CAPTION))
             {
-                if (OSVersionHelper.IsWindows11_OrGreater is false)
-                {
-                    // Windows 10:
-                    // We have to add or remove one pixel on any side of the window to force a flicker free resize.
-                    // Removing pixels would result in a smaller client area.
-                    // Adding pixels does not seem to really increase the client area.
-                    newSize.bottom += 1;
-                }
+                var rcBefore = Marshal.PtrToStructure<RECT>(lParam);
+                PInvoke.DefWindowProc(this.windowHandle, (uint)uMsg, wParam, lParam);
+                var rc = Marshal.PtrToStructure<RECT>(lParam);
+                rc.top = rcBefore.top; // Remove titlebar
+                Marshal.StructureToPtr(rc, lParam, true);
             }
-
-            Marshal.StructureToPtr(newSize, lParam, true);
 
             // Per MSDN for NCCALCSIZE, always return 0 when wParam == FALSE
-            return (IntPtr)(WVR.REDRAW | WVR.VALIDRECTS);
+            //
+            // Returning 0 when wParam == TRUE is not appropriate - it will preserve
+            // the old client area and align it with the upper-left corner of the new
+            // client area. So we simply ask for a redraw (WVR_REDRAW)
+
+            var retVal = IntPtr.Zero;
+            if (wParamIsTrue) // wParam == TRUE
+            {
+                // Using the combination of WVR.VALIDRECTS and WVR.REDRAW gives the smoothest
+                // resize behavior we can achieve here.
+                retVal = new IntPtr((int)(WVR.VALIDRECTS | WVR.REDRAW));
+            }
+
+            return retVal;
         }
 
         private HT _GetHTFromResizeGripDirection(ResizeGripDirection direction)
@@ -824,6 +813,15 @@ namespace ControlzEx.Behaviors
                     structure.styleNew |= (uint)WINDOW_STYLE.WS_OVERLAPPED;
                 }
 
+                if (this.UseNativeCaptionButtons)
+                {
+                    structure.styleNew |= (uint)WINDOW_STYLE.WS_SYSMENU;
+                }
+                else
+                {
+                    structure.styleNew &= (uint)~WINDOW_STYLE.WS_SYSMENU;
+                }
+
                 Marshal.StructureToPtr(structure, lParam, fDeleteOld: true);
             }
 
@@ -894,12 +892,16 @@ namespace ControlzEx.Behaviors
         private WindowState _GetHwndState()
         {
             var wpl = PInvoke.GetWindowPlacement(this.windowHandle);
-            return wpl.showCmd switch
+            switch (wpl.showCmd)
             {
-                SHOW_WINDOW_CMD.SW_SHOWMINIMIZED => WindowState.Minimized,
-                SHOW_WINDOW_CMD.SW_SHOWMAXIMIZED => WindowState.Maximized,
-                _ => WindowState.Normal
-            };
+                case SHOW_WINDOW_CMD.SW_SHOWMINIMIZED:
+                    return WindowState.Minimized;
+
+                case SHOW_WINDOW_CMD.SW_SHOWMAXIMIZED:
+                    return WindowState.Maximized;
+            }
+
+            return WindowState.Normal;
         }
 
         /// <summary>
@@ -938,11 +940,9 @@ namespace ControlzEx.Behaviors
             var state = assumeState ?? this._GetHwndState();
 
             if (assumeState is not null
-                || this.lastWindowStateForSystemMenu != state
-                || this.lastResizeModeForSystemMenu != this.AssociatedObject.ResizeMode)
+                || this.lastMenuState != state)
             {
-                this.lastWindowStateForSystemMenu = state;
-                this.lastResizeModeForSystemMenu = this.AssociatedObject.ResizeMode;
+                this.lastMenuState = state;
 
                 var menuHandle = PInvoke.GetSystemMenu(this.windowHandle, false);
                 if (menuHandle != IntPtr.Zero)
@@ -986,7 +986,7 @@ namespace ControlzEx.Behaviors
         private void UpdateWindowStyle()
         {
             if (this.IgnoreTaskbarOnMaximize
-                && this._GetHwndState() is WindowState.Maximized)
+                && this._GetHwndState() == WindowState.Maximized)
             {
                 this._ModifyStyle(WINDOW_STYLE.WS_CAPTION, 0);
             }

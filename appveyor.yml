@@ -1,15 +1,10 @@
 # http://www.appveyor.com/docs/appveyor-yml
+
 branches:
   only:
     - develop
     - main
     - /\d*\.\d*\.\d*/
-
-image: Visual Studio 2022
-test: false
-
-pull_requests:
-  do_not_increment_build_number: false
 
 environment:
   azure-key-vault-url:
@@ -22,16 +17,29 @@ environment:
     secure: CUpRJxMLeUZwNPMcqI0wECaWfy5AMnWn1UZhBd9WnQ3Z16lJP1Vzrkf24mccbhUD
   azure-key-vault-certificate:
     secure: BSPdW2TgnQtoQXXbeDECug==
-  IGNORE_NORMALISATION_GIT_HEAD_MOVE: 1
+
+skip_tags: true
+image: Visual Studio 2022
+test: false
 
 install:
+  # Appveyor uses git checkout -qf FETCH_HEAD but all GitVersion versions above 5.6.3 doesn't support this detached header
+  # This is a workaround for this issue
+  - ps: |
+      if ($env:APPVEYOR_PULL_REQUEST_HEAD_COMMIT -ne "")
+      {
+        git checkout -qf $($env:APPVEYOR_PULL_REQUEST_HEAD_COMMIT)
+      }
   - ps: Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile 'dotnet-install.ps1'
-  - ps: ./dotnet-install.ps1 -JSonFile ./global.json -InstallDir "C:\Program Files\dotnet"
+  - ps: ./dotnet-install.ps1 -Version 8.0.100 -InstallDir "C:\Program Files\dotnet"
+
+pull_requests:
+  do_not_increment_build_number: false
 
 build_script:
   - ps: dotnet --info
-  - ps: git status
-  - ps: .\build.ps1 --target=CI -v verbose
+  - ps: gitversion /version
+  - ps: .\build.ps1 --target=CI
 
 after_build:
   - ps: gci -Filter *.trx -Path .\TestResults\ | % { (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/mstest/$($env:APPVEYOR_JOB_ID)", (Resolve-Path $_.FullName)) }
@@ -41,3 +49,7 @@ artifacts:
 
 nuget:
   disable_publish_on_pr: true
+
+skip_commits:
+  files:
+    - '**/*.md'

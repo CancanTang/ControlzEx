@@ -4,18 +4,16 @@
 // ReSharper disable once CheckNamespace
 namespace Windows.Win32
 {
-    using global::System;
-    using global::System.ComponentModel;
-    using global::System.Runtime.CompilerServices;
-    using global::System.Runtime.InteropServices;
-    using global::System.Windows;
-    using global::System.Windows.Media;
+    using System;
+    using System.ComponentModel;
+    using System.Runtime.CompilerServices;
+    using System.Runtime.InteropServices;
+    using System.Windows;
+    using System.Windows.Media;
 
     using Windows.Win32.Foundation;
     using Windows.Win32.Graphics.Gdi;
     using Windows.Win32.UI.WindowsAndMessaging;
-
-    using DrawingPoint = global::System.Drawing.Point;
 
     internal partial class PInvoke
     {
@@ -38,102 +36,9 @@ namespace Windows.Win32
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         private static extern unsafe int MapWindowPoints(HWND hWndFrom, HWND hWndTo, RECT* lpPoints, uint cPoints);
 
-        internal static DeleteDCSafeHandle CreateCompatibleDC(SafeHandle hdc)
-        {
-            var hdcAddRef = false;
-            try
-            {
-                HDC hdcLocal;
-                if (hdc is object)
-                {
-                    hdc.DangerousAddRef(ref hdcAddRef);
-                    hdcLocal = (HDC)hdc.DangerousGetHandle();
-                }
-                else
-                {
-                    hdcLocal = default;
-                }
-
-                var result = CreateCompatibleDC(hdcLocal);
-                return new(result, true);
-            }
-            finally
-            {
-                if (hdcAddRef)
-                {
-                    hdc!.DangerousRelease();
-                }
-            }
-        }
-
         public static void SelectObject(SafeHandle hdc, SafeHandle handle)
         {
             SelectObject(hdc, new HGDIOBJ(handle.DangerousGetHandle()));
-        }
-
-        private static HGDIOBJ SelectObject(SafeHandle hdc, HGDIOBJ h)
-        {
-            var hdcAddRef = false;
-            try
-            {
-                hdc.DangerousAddRef(ref hdcAddRef);
-                var hdcLocal = (HDC)hdc.DangerousGetHandle();
-
-                var result = SelectObject(hdcLocal, h);
-                return result;
-            }
-            finally
-            {
-                if (hdcAddRef)
-                {
-                    hdc.DangerousRelease();
-                }
-            }
-        }
-
-        internal static BOOL AlphaBlend(SafeHandle hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, SafeHandle hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn)
-        {
-            var hdcDestAddRef = false;
-            var hdcSrcAddRef = false;
-            try
-            {
-                HDC hdcDestLocal;
-                if (hdcDest is object)
-                {
-                    hdcDest.DangerousAddRef(ref hdcDestAddRef);
-                    hdcDestLocal = (HDC)hdcDest.DangerousGetHandle();
-                }
-                else
-                {
-                    hdcDestLocal = default;
-                }
-
-                HDC hdcSrcLocal;
-                if (hdcSrc is object)
-                {
-                    hdcSrc.DangerousAddRef(ref hdcSrcAddRef);
-                    hdcSrcLocal = (HDC)hdcSrc.DangerousGetHandle();
-                }
-                else
-                {
-                    hdcSrcLocal = default;
-                }
-
-                var result = AlphaBlend(hdcDestLocal, xoriginDest, yoriginDest, wDest, hDest, hdcSrcLocal, xoriginSrc, yoriginSrc, wSrc, hSrc, ftn);
-                return result;
-            }
-            finally
-            {
-                if (hdcDestAddRef)
-                {
-                    hdcDest!.DangerousRelease();
-                }
-
-                if (hdcSrcAddRef)
-                {
-                    hdcSrc!.DangerousRelease();
-                }
-            }
         }
 
         public static void SendMessage(IntPtr hWnd, WM msg, nuint wParam, IntPtr lParam)
@@ -226,9 +131,9 @@ namespace Windows.Win32
             return rect;
         }
 
-        public static unsafe DrawingPoint GetCursorPos()
+        public static unsafe System.Drawing.Point GetCursorPos()
         {
-            var rect = default(DrawingPoint);
+            var rect = default(System.Drawing.Point);
             var result = GetCursorPos(&rect);
             return rect;
         }
@@ -264,7 +169,7 @@ namespace Windows.Win32
 
         public static unsafe void RaiseMouseMessage(IntPtr hWnd, WM msg, nuint wParam, nint lParam, bool send = true)
         {
-            var mousePoint = default(DrawingPoint);
+            var mousePoint = default(System.Drawing.Point);
             mousePoint.X = GetXLParam((int)lParam);
             mousePoint.Y = GetYLParam((int)lParam);
             var point = mousePoint;
@@ -504,27 +409,5 @@ namespace Windows.Win32
         VREDRAW = 0x0200,
         VALIDRECTS = 0x0400,
         REDRAW = HREDRAW | VREDRAW,
-    }
-
-    internal class DeleteDCSafeHandle : SafeHandle
-    {
-#pragma warning disable SA1310
-        private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1L);
-#pragma warning restore SA1310
-
-        internal DeleteDCSafeHandle()
-            : base(INVALID_HANDLE_VALUE, true)
-        {
-        }
-
-        internal DeleteDCSafeHandle(IntPtr preexistingHandle, bool ownsHandle = true)
-            : base(INVALID_HANDLE_VALUE, ownsHandle)
-        {
-            this.SetHandle(preexistingHandle);
-        }
-
-        public override bool IsInvalid => this.handle.ToInt64() == -1L || this.handle.ToInt64() == 0L;
-
-        protected override bool ReleaseHandle() => PInvoke.DeleteDC((HDC)this.handle);
     }
 }

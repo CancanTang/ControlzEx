@@ -18,7 +18,6 @@ FindWindow
 GetClientRect
 GetCursorPos
 GetDC
-DeleteDC
 GetDeviceCaps
 GetKeyState
 GetModuleHandle

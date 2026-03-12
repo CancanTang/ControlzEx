@@ -2,8 +2,8 @@
 // ReSharper disable once CheckNamespace
 namespace Windows.Win32
 {
-    using global::System.Runtime.CompilerServices;
-    using global::System.Windows;
+    using System.Runtime.CompilerServices;
+    using System.Windows;
     using Windows.Win32.Foundation;
     using Windows.Win32.UI.WindowsAndMessaging;
 

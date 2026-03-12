@@ -30,7 +30,8 @@ internal enum DWMSBT : uint
     DWMSBT_TABBEDWINDOW = 4
 }
 
-internal static class DWMAttributeValues
+[CLSCompliant(false)]
+public static class DWMAttributeValues
 {
     public const int False = 0x00;
     public const int True = 0x01;

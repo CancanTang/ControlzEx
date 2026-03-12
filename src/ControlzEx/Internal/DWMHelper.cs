@@ -67,7 +67,8 @@ namespace ControlzEx.Internal
 
         public static bool SetBackdropType(IntPtr hWnd, WindowBackdropType windowBackdropType)
         {
-            return SetWindowAttributeValue(hWnd, DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (int)windowBackdropType);
+            const DWMWINDOWATTRIBUTE DWMWA_SYSTEMBACKDROP_TYPE = (DWMWINDOWATTRIBUTE)38;
+            return SetWindowAttributeValue(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, (int)windowBackdropType);
         }
     }
 }

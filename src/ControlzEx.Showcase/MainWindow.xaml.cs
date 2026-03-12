@@ -6,6 +6,7 @@ namespace ControlzEx.Showcase
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
     using System.Windows;
     using System.Windows.Input;
@@ -18,6 +19,9 @@ namespace ControlzEx.Showcase
 
     public partial class MainWindow
     {
+        private static readonly PropertyInfo criticalHandlePropertyInfo = typeof(Window).GetProperty("CriticalHandle", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly object[] emptyObjectArray = Array.Empty<object>();
+
         public static readonly DependencyProperty ColorsProperty = DependencyProperty.Register(nameof(Colors), typeof(List<Color>), typeof(MainWindow), new PropertyMetadata(null));
         public static readonly DependencyProperty BrushesProperty = DependencyProperty.Register(nameof(Brushes), typeof(List<Brush>), typeof(MainWindow), new PropertyMetadata(null));
 
